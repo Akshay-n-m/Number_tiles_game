@@ -1,0 +1,106 @@
+(lists the profile, access key , secret access key , region)
+aws configure list 
+
+(lists the user_id, account , arn)
+aws sts get-caller-identity 
+
+(lists current instances)
+aws ec2 describe-instances 
+
+
+(creating a cluster)
+eksctl create cluster --name demo-cluster --region us-east-1 --fargate
+
+(updates kubectl version and run this command if required)
+aws eks update-kubeconfig --name demo-cluster --region us-east-1 
+
+(lists all the services running in your current Kubernetes cluster)
+kubectl get svc
+
+(used to create a fargate profile inside your cluster)
+eksctl create fargateprofile `
+  --cluster demo-cluster `
+  --region us-east-1 `
+  --name alb-sample-app `
+  --namespace game-2048
+
+(Deploy the deployment, service and Ingress)
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/examples/2048/2048_full.yaml
+
+(shows every pod and their status inside a cluster)
+kubectl get pods -n game-2048
+
+(if any of the pod gets stuck in "on deployment", try to troubleshoot this issue with this command)
+kubectl get pods -n game-2048 -w
+
+(lists all the services running in your cluster along with the game's namespace)
+kubectl get svc -n game-2048
+
+(you'll get the ingress controller for your application)
+kubectl get ingress -n game-2048
+
+(you'll get the services running for your application / cluster and ignore if metric-servers are in pending status)
+kubectl get pods -n kube-system
+
+(create an OIDC ID)
+$clusterName = "demo-cluster" 
+$oidclssuer = aws eks describe-cluster --name $clusterName --query "cluster.identity.oidc.issuer" --output text 
+$oidcld = ($oidclssuer -split "/")[-1] 
+Write-Output "OIDC ID: $oidcld"
+
+(connect OIDC)
+$clusterName = "demo-cluster" 
+
+eksctl utils associate-iam-oidc-provider --cluster $clusterName --approve
+
+(now download the IAM policy)
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json" -OutFile "iam_policy.json"
+
+(check whether the file is downloaded and where it is downloaded)
+Get-Item .\iam_policy.json
+
+(create the policy in your cluster)
+aws iam create-policy `
+--policy-name AWSLoadBalancerControllerIAMPolicy `
+--policy-document file://iam_policy.json
+
+(now create a service account)
+$clusterName = "demo-cluster"
+$awsAccountId = "905418479506"
+
+eksctl create iamserviceaccount `
+  --cluster=<your_cluster_name> `
+  --namespace=kube-system `
+  --name=aws-load-balancer-controller `
+  --role-name AmazonEKSLoadBalancerControllerRole `
+  --attach-policy-arn=arn:aws:iam::<your_account_id>:policy/AWSLoadBalancerControllerIAMPolicy `
+  --approve `
+  --override-existing-serviceaccounts
+
+
+(now install helm to your service account and fill out the VPC)
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller `
+  -n kube-system `
+  --set clusterName=<your_cluster_name> `
+  --set serviceAccount.create=false `
+  --set serviceAccount.name=aws-load-balancer-controller `
+  --set region=<your_region> `
+  --set vpcId=<your_VPC_ID>
+
+
+(verify if the deployments are running or not)
+kubectl get deployment -n kube-system aws-load-balancer-controller
+
+(verify if services are running right)
+kubectl get deploy -n kube-system
+
+(verify if all pods are running right)
+kubectl get pods -n kube-system 
+
+(run this code to get address from ingress to your application)
+kubectl get ingress -n game-2048
+
+(after you get the address, copy it and add http:// before the link and paste it in browser to deploy  your game)
+
+CONGRATS. YOU'VE SUCCESSFULLY DEPLOYED THE GAME
+HAPPY CODING :)
